@@ -59,14 +59,23 @@ class BootstrapGame:
     def run(self, games: int):
         home_wins = 0
         away_wins = 0
+        homeScore = 0
+        awayScore = 0
+        playerStats = {}
         for i in range(games):
-            game = GameSimulator(copy.deepcopy(simulationInfo))
-            if game.home_team.score > game.away_team.score:
+            game = GameSimulator(copy.deepcopy(self.simulationInfo))
+            game.run()
+            homeScore += game.simulationInfo.home_team.score
+            awayScore += game.simulationInfo.away_team.score
+            if game.simulationInfo.home_team.score > game.simulationInfo.away_team.score:
                 home_wins += 1
             else:
                 away_wins += 1
         
-        print('In {} simulations {} won {} and {} won {}'.format(n, self.home_team.name, home_wins, self.away_team.name, away_wins))
+        print('In {} simulations {} won {} and {} won {} with an average score of {} - {}'.format(
+            games, self.simulationInfo.home_team.name, home_wins, 
+            self.simulationInfo.away_team.name, away_wins, homeScore/games, awayScore/games
+        ))
 
 
 class GameSimulator:
