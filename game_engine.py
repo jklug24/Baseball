@@ -102,14 +102,14 @@ class FrameSimulator:
         while outs != 3 and not self.simulationInfo.walk_off():
 
             result = AtBatSimulator(self.simulationInfo).run()
-            score, baseText = bases.advance_runners(result, self.simulationInfo.offense().nextBatter())
+            score, baseText = bases.advance_runners(result, self.simulationInfo.offense().batter())
             self.simulationInfo.offense().increment_score(score)
-            self.simulationInfo.offense().recordStat(self.simulationInfo.offense().nextBatter().name, result)
+            self.simulationInfo.offense().recordStat(self.simulationInfo.offense().batter().name, result)
 
             if (score > 0):
-                self.simulationInfo.log('{} {}.'.format(self.simulationInfo.offense().nextBatter().name, result), logLevel=1)
+                self.simulationInfo.log('{} {}.'.format(self.simulationInfo.offense().batter().name, result), logLevel=1)
             else:
-                self.simulationInfo.log('{} {}.'.format(self.simulationInfo.offense().nextBatter().name, result), logLevel=2)
+                self.simulationInfo.log('{} {}.'.format(self.simulationInfo.offense().batter().name, result), logLevel=2)
                 
 
             if result == 'field_out' or result == 'strikeout':
@@ -129,7 +129,7 @@ class AtBatSimulator:
         self.simulationInfo = simulationInfo
 
     def run(self):
-        batter = self.simulationInfo.offense().nextBatter()
+        batter = self.simulationInfo.offense().batter()
         strikes = 0
         balls = 0
         pitch_num = 1
@@ -146,7 +146,7 @@ class AtBatSimulator:
                 strikes += 1
             elif result == 'hit_into_play':
                 self.simulationInfo.log("{}. {}, {}".format(pitch_num, pitch, result), logLevel=3)
-                return batter.ip_outcomes[random.multinomial(1, batter.ip_probs).tolist().index(1)]
+                return batter.simulate_hit()
             
             self.simulationInfo.log("{}. {}, {}\t{} - {}".format(pitch_num, pitch, result, balls, strikes), logLevel=3)
             pitch_num += 1

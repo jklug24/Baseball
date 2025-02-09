@@ -24,11 +24,9 @@ class BasicPitchSimulator(PitchSimulator):
         self.simulationInfo = simulationInfo
 
     def run(self):
-        batter = self.simulationInfo.offense().nextBatter()
-        pitcher = self.simulationInfo.defense().pitcher
+        batter = self.simulationInfo.offense().batter()
+        pitcher = self.simulationInfo.defense().pitcher()
 
-        pitch = pitcher.pitch_types[random.multinomial(1, pitcher.pitch_rates).tolist().index(1)]
-        batter_rates, batter_pitch_type = batter.get_pitch_probs(pitch)
-        result = batter_pitch_type[random.multinomial(1, batter_rates).tolist().index(1)]
-
+        pitch = pitcher.simulate_pitch_basic()
+        result = batter.simulate_pitch_basic(pitch)
         return pitch, result

@@ -18,7 +18,7 @@ class Team:
                 roster = self.predict_roster(statcast)
 
         self.roster = [Batter(id, statcast) for id in roster]
-        self.pitcher = Pitcher(pitcher_id, statcast)
+        self._pitcher = Pitcher(pitcher_id, statcast)
 
         self.idx = 0
         self.score = 0
@@ -64,8 +64,11 @@ class Team:
             lineup = lineup + i.name + '\n'
         return lineup
 
-    def nextBatter(self):
+    def batter(self):
         return self.roster[self.idx]
+
+    def pitcher(self):
+        return self._pitcher
 
     def recordStat(self, player, stat):
         if player not in self.stats:
@@ -88,10 +91,10 @@ class Batter:
             self.name = "Unknown Player"
         
         stats = statcast.loc[statcast.batter == id]
-        self.ip_probs, self.ip_outcomes = self.init_ip_stats(stats.copy())
-        self.pitch_probs = self.init_pitch_stats(stats.copy())
+        self.ip_probs, self.ip_outcomes = self.__init_ip_stats(stats.copy())
+        self.pitch_probs = self.__init_pitch_stats(stats.copy())
     
-    def init_ip_stats(self, probs):
+    def __init_ip_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
         probs = pd.crosstab(probs.batter, probs.events)
 
@@ -111,7 +114,7 @@ class Batter:
     def get_ip_probs(self):
         return self.ip_probs, self.ip_outcomes
 
-    def init_pitch_stats(self, probs):
+    def __init_pitch_stats(self, probs):
         ps = {}
 
         for pitch in probs.pitch_type.unique():
@@ -136,8 +139,14 @@ class Batter:
             'hit_into_play',
             'swinging_strike']))
 
-    def simulate_at_bat(self):
+    def simulate_hit(self):
         return self.ip_outcomes[random.multinomial(1, self.ip_probs).tolist().index(1)]
+
+
+    def simulate_pitch_basic(self, pitch): 
+        probs, pitch_type = self.get_pitch_probs(pitch)
+        return pitch_type[random.multinomial(1, probs).tolist().index(1)]
+
 
 
 
@@ -153,10 +162,10 @@ class Pitcher:
             self.name = "Unknown Player"
         
         stats = statcast.loc[statcast.pitcher == id]
-        self.ip_probs, self.ip_outcomes = self.init_ip_stats(stats.copy())
-        self.pitch_probs, self.pitch_types, self.pitch_rates = self.init_pitch_stats(stats.copy())
+        self.ip_probs, self.ip_outcomes = self.__init_ip_stats(stats.copy())
+        self.pitch_probs, self.pitch_types, self.pitch_rates = self.__init_pitch_stats(stats.copy())
 
-    def init_ip_stats(self, probs):
+    def __init_ip_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
         probs = pd.crosstab(probs.batter, probs.events)
 
@@ -176,7 +185,7 @@ class Pitcher:
     def get_ip_probs(self):
         return self.ip_probs, self.ip_outcomes
 
-    def init_pitch_stats(self, probs):
+    def __init_pitch_stats(self, probs):
         ps = {}
         pitches = []
         count = []
@@ -194,3 +203,6 @@ class Pitcher:
         
         count = [c/sum(count) for c in count]
         return ps, pitches, count
+
+    def simulate_pitch_basic(self): 
+        return self.pitch_types[random.multinomial(1, self.pitch_rates).tolist().index(1)]
