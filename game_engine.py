@@ -1,4 +1,5 @@
-from simulationInfo import SimulationInfo
+from simulation_info import SimulationInfo
+from pitch_simulator import PitchSimulator
 import numpy as np
 from numpy import random
 import copy
@@ -135,7 +136,7 @@ class AtBatSimulator:
         self.simulationInfo.log('{} up to bat.\n'.format(batter.name), logLevel=3)
 
         while strikes < 3 and balls < 4:
-            pitch, result = PitchSimulator(self.simulationInfo).run()
+            pitch, result = PitchSimulator.init(self.simulationInfo).run()
 
             if result == 'ball':
                 balls += 1
@@ -154,17 +155,6 @@ class AtBatSimulator:
             return 'strikeout'
         elif balls == 4:
             return 'walk'
-
-class PitchSimulator:
-    def __init__(self, simulationInfo: SimulationInfo):
-        self.simulationInfo = simulationInfo
-
-    def run(self):
-        batter = self.simulationInfo.offense().nextBatter()
-        pitcher = self.simulationInfo.defense().pitcher
-        pitch = pitcher.pitch_types[random.multinomial(1, pitcher.pitch_rates).tolist().index(1)]
-        batter_rates, batter_pitch_type = batter.get_pitch_probs(pitch)
-        return pitch, batter_pitch_type[random.multinomial(1, batter_rates).tolist().index(1)]
 
 
 

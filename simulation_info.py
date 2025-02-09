@@ -17,16 +17,18 @@ class SimulationInfo:
         away_roster=None, 
         backtest=False, 
         granularity: Granularity = Granularity.PITCH,
+        pitchSimulator: str = 'basic',
         logLevel: int = 0
     ):
         self.date = date
-        self.statcast = statcast(start_dt="2023-03-29", end_dt=date)
+        self.statcast = statcast(start_dt="2024-03-29", end_dt=date)
         self.away_team = Team(away_team, date, away_roster, self.statcast, backtest=backtest)
         self.home_team = Team(home_team, date, home_roster, self.statcast, backtest=backtest)
         self.inning = 1
         self.top = True
         self.granularity = granularity
         self.logLevel = logLevel
+        self.pitchSimulator = pitchSimulator
         self._log = ''
 
     def is_home(self, team: Team):
