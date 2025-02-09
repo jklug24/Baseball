@@ -9,20 +9,20 @@ class Team:
     def __init__(self, name, date, roster, statcast, backtest):
         self.name = name
         self.date = date
-        self.statcast = statcast
 
         if (roster is None):
             if backtest:
-                roster, pitcher_id = self.get_roster()
-                self.statcast = self.statcast.loc[self.statcast.game_date != self.date]
+                roster, pitcher_id = self.get_roster(statcast)
+                statcast = statcast.loc[statcast.game_date != self.date]
             else:
-                roster = self.predict_roster(self.statcast)
+                roster = self.predict_roster(statcast)
 
         self.roster = [Batter(id, statcast) for id in roster]
         self.pitcher = Pitcher(pitcher_id, statcast)
 
         self.idx = 0
         self.score = 0
+        self.stats = {}
 
     def next_idx(self):
         self.idx += 1
@@ -32,8 +32,8 @@ class Team:
     def increment_score(self, score):
         self.score += score
 
-    def predict_roster(self):
-        stats = self.statcast.loc[((self.statcast.home_team == self.name) & (self.statcast.inning_topbot == 'Bot')) | ((self.statcast.away_team == self.name) & (self.statcast.inning_topbot == 'Top'))]
+    def predict_roster(self, statcast):
+        stats = statcast.loc[((statcast.home_team == self.name) & (statcast.inning_topbot == 'Bot')) | ((statcast.away_team == self.name) & (statcast.inning_topbot == 'Top'))]
                 
         df = stats.groupby(['game_date', 'batter'])['at_bat_number'].min().to_frame().reset_index()
         dfs = []
@@ -53,9 +53,9 @@ class Team:
 
         return [i[0] for i in np.array(dfs)[np.array([i == max(equal) for i in equal])][-1]]
 
-    def get_roster(self):
-        pitchers = self.statcast.loc[(((self.statcast.home_team == self.name) & (self.statcast.inning_topbot == 'Top')) | ((self.statcast.away_team == self.name) & (self.statcast.inning_topbot == 'Bot'))) & (self.statcast.game_date == self.date)].iloc[0].pitcher
-        stats = self.statcast.loc[(((self.statcast.home_team == self.name) & (self.statcast.inning_topbot == 'Bot')) | ((self.statcast.away_team == self.name) & (self.statcast.inning_topbot == 'Top'))) & (self.statcast.game_date == self.date)]
+    def get_roster(self, statcast):
+        pitchers = statcast.loc[(((statcast.home_team == self.name) & (statcast.inning_topbot == 'Top')) | ((statcast.away_team == self.name) & (statcast.inning_topbot == 'Bot'))) & (statcast.game_date == self.date)].iloc[0].pitcher
+        stats = statcast.loc[(((statcast.home_team == self.name) & (statcast.inning_topbot == 'Bot')) | ((statcast.away_team == self.name) & (statcast.inning_topbot == 'Top'))) & (statcast.game_date == self.date)]
         return [x for x in stats.groupby(['game_date', 'batter'])['at_bat_number'].min().to_frame().reset_index().sort_values('at_bat_number', ignore_index = True)['batter']], pitchers
 
     def get_lineup(self):
@@ -66,6 +66,15 @@ class Team:
 
     def nextBatter(self):
         return self.roster[self.idx]
+
+    def recordStat(self, player, stat):
+        if player not in self.stats:
+            self.stats[player] = {}  # Create first level key if missing
+
+        if stat not in self.stats[player]:
+            self.stats[player][stat] = 1  # Initialize if missing
+        else:
+            self.stats[player][stat] += 1
 
 
 

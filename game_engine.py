@@ -4,6 +4,7 @@ import numpy as np
 from numpy import random
 from enum import Enum, auto
 import copy
+from collections import defaultdict
 
 class Granularity(Enum):
     PITCH = auto()
@@ -24,7 +25,7 @@ class SimulationInfo:
         logLevel: int = 0
     ):
         self.date = date
-        self.statcast = statcast(start_dt="2024-03-29", end_dt=date)
+        self.statcast = statcast(start_dt="2023-03-29", end_dt=date)
         self.away_team = Team(away_team, date, away_roster, self.statcast, backtest=backtest)
         self.home_team = Team(home_team, date, home_roster, self.statcast, backtest=backtest)
         self.inning = 1
@@ -61,12 +62,17 @@ class BootstrapGame:
         away_wins = 0
         homeScore = 0
         awayScore = 0
-        playerStats = {}
+        homeStats = {}
+        awayStats = {}
         for i in range(games):
             game = GameSimulator(copy.deepcopy(self.simulationInfo))
             game.run()
+
             homeScore += game.simulationInfo.home_team.score
             awayScore += game.simulationInfo.away_team.score
+            homeStats = self.merge_stats(homeStats, game.simulationInfo.home_team.stats)
+            awayStats = self.merge_stats(awayStats, game.simulationInfo.away_team.stats)
+
             if game.simulationInfo.home_team.score > game.simulationInfo.away_team.score:
                 home_wins += 1
             else:
@@ -76,6 +82,26 @@ class BootstrapGame:
             games, self.simulationInfo.home_team.name, home_wins, 
             self.simulationInfo.away_team.name, away_wins, homeScore/games, awayScore/games
         ))
+        print(homeStats)
+        print(awayStats)
+
+    def merge_stats(self, dict1, dict2):
+        merged = defaultdict(dict)  # Using defaultdict to simplify merging
+
+        # Get all unique keys from both dictionaries
+        all_keys = set(dict1.keys()) | set(dict2.keys())
+
+        for key in all_keys:
+            # Merge inner dictionaries
+            sub_keys = set(dict1.get(key, {}).keys()) | set(dict2.get(key, {}).keys())
+            merged[key] = {
+                sub_key: dict1.get(key, {}).get(sub_key, 0) + dict2.get(key, {}).get(sub_key, 0)
+                for sub_key in sub_keys
+            }
+
+        return dict(merged)  # Convert back to a regular dictionary
+
+
 
 
 class GameSimulator:
@@ -124,6 +150,7 @@ class FrameSimulator:
             result = AtBatSimulator(self.simulationInfo).run()
             score, baseText = bases.advance_runners(result, self.simulationInfo.offense().nextBatter())
             self.simulationInfo.offense().increment_score(score)
+            self.simulationInfo.offense().recordStat(self.simulationInfo.offense().nextBatter().name, result)
 
             if (score > 0):
                 self.simulationInfo.log('{} {}.'.format(self.simulationInfo.offense().nextBatter().name, result), logLevel=1)
@@ -149,18 +176,13 @@ class AtBatSimulator:
 
     def run(self):
         batter = self.simulationInfo.offense().nextBatter()
-        pitcher = self.simulationInfo.defense().pitcher
         strikes = 0
         balls = 0
-        self.simulationInfo.log('{} up to bat.\n'.format(batter.name), logLevel=3)
         pitch_num = 1
+        self.simulationInfo.log('{} up to bat.\n'.format(batter.name), logLevel=3)
 
         while strikes < 3 and balls < 4:
-            pitch = pitcher.pitch_types[random.multinomial(1, pitcher.pitch_rates).tolist().index(1)]
-
-            batter_rates, batter_pitch_type = batter.get_pitch_probs(pitch)
-
-            result = batter_pitch_type[random.multinomial(1, batter_rates).tolist().index(1)]
+            pitch, result = PitchSimulator(self.simulationInfo).run()
 
             if result == 'ball':
                 balls += 1
@@ -171,6 +193,7 @@ class AtBatSimulator:
             elif result == 'hit_into_play':
                 self.simulationInfo.log("{}. {}, {}".format(pitch_num, pitch, result), logLevel=3)
                 return batter.ip_outcomes[random.multinomial(1, batter.ip_probs).tolist().index(1)]
+            
             self.simulationInfo.log("{}. {}, {}\t{} - {}".format(pitch_num, pitch, result, balls, strikes), logLevel=3)
             pitch_num += 1
     
@@ -178,6 +201,17 @@ class AtBatSimulator:
             return 'strikeout'
         elif balls == 4:
             return 'walk'
+
+class PitchSimulator:
+    def __init__(self, simulationInfo: SimulationInfo):
+        self.simulationInfo = simulationInfo
+
+    def run(self):
+        batter = self.simulationInfo.offense().nextBatter()
+        pitcher = self.simulationInfo.defense().pitcher
+        pitch = pitcher.pitch_types[random.multinomial(1, pitcher.pitch_rates).tolist().index(1)]
+        batter_rates, batter_pitch_type = batter.get_pitch_probs(pitch)
+        return pitch, batter_pitch_type[random.multinomial(1, batter_rates).tolist().index(1)]
 
 
 
