@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from batter_engine import Team
+from team import Team
 from pybaseball import *
 
 class Granularity(Enum):
