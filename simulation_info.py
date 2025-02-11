@@ -5,6 +5,21 @@ from pybaseball import *
 class Granularity(Enum):
     PITCH = auto()
 
+class Count:
+    def __init__(self):
+        self.balls = 0
+        self.strikes = 0
+
+    def reset(self):
+        self.balls = 0
+        self.strikes = 0
+
+    def strike(self): 
+        self.strikes += 1
+
+    def ball(self):
+        self.balls += 1
+
 
 # This will hold all the information for the game before starting
 class SimulationInfo:
@@ -29,6 +44,7 @@ class SimulationInfo:
         self.granularity = granularity
         self.logLevel = logLevel
         self.pitchSimulator = pitchSimulator
+        self.count = Count()
         self._log = ''
 
     def is_home(self, team: Team):

@@ -92,7 +92,9 @@ class Batter:
         
         stats = statcast.loc[statcast.batter == id]
         self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(stats.copy())
-        self.pitch_probs = self.__init_pitch_stats(stats.copy())
+        self.__init_batter_outcome_probs_global(stats)
+        self.__init_batter_outcome_probs_basic(stats)
+        self.__init_batter_outcome_probs_count_based(stats)
     
     def init_in_play_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
@@ -114,19 +116,36 @@ class Batter:
     def get_in_play_probs(self):
         return self.in_play_probs, self.ip_outcomes
 
-    def __init_pitch_stats(self, probs):
-        ps = {}
+    def __init_batter_outcome_probs_global(self, batter_data: pd.DataFrame):
+        """
+        Computes overall probabilities for all outcomes, regardless of pitch type or count.
+        """
+        self.global_outcome_probs = batter_data['description'].value_counts(normalize=True).to_dict()
 
-        for pitch in probs.pitch_type.unique():
-            p = probs.loc[probs.pitch_type == pitch]
-            p = pd.crosstab(p.pitch_type, p.description)
 
-            p = p.div(p.sum(axis=1), axis=0)
+    def __init_batter_outcome_probs_basic(self, batter_data: pd.DataFrame):
+        """
+        Computes overall outcome probabilities for each pitch type.
+        """
+        self.outcome_probs = {}
+        
+        grouped = batter_data.groupby('pitch_type')['description'].value_counts(normalize=True)
+        
+        for pitch_type, outcome_probs in grouped.groupby(level=0):
+            self.outcome_probs[pitch_type] = outcome_probs.droplevel(0).to_dict()
 
-            outcomes = p.columns.to_list()
-            p = p.values.flatten().tolist()
-            ps[pitch] = p, outcomes
-        return ps
+    def __init_batter_outcome_probs_count_based(self, batter_data: pd.DataFrame):
+        """
+        Computes outcome probabilities for each pitch type based on count (balls-strikes).
+        """
+        self.count_based_outcome_probs = {}
+        
+        grouped = batter_data.groupby(['pitch_type', 'balls', 'strikes'])['description'].value_counts(normalize=True)
+        
+        for (pitch_type, balls, strikes), outcome_probs in grouped.groupby(level=[0, 1, 2]):
+            if pitch_type not in self.count_based_outcome_probs:
+                self.count_based_outcome_probs[pitch_type] = {}
+            self.count_based_outcome_probs[pitch_type][(balls, strikes)] = outcome_probs.droplevel([0, 1, 2]).to_dict()
 
     def get_pitch_probs(self, pitch):
         return self.pitch_probs.get(pitch, ([
@@ -143,9 +162,27 @@ class Batter:
         return self.ip_outcomes[random.multinomial(1, self.in_play_probs).tolist().index(1)]
 
 
-    def simulate_pitch_basic(self, pitch): 
-        probs, pitch_type = self.get_pitch_probs(pitch)
-        return pitch_type[random.multinomial(1, probs).tolist().index(1)]
+    def get_pitch_result(self, pitch_type: str, balls: int = None, strikes: int = None) -> str:
+        """
+        Predicts the outcome of a pitch based on type and optionally count.
+        :param pitch_type: The type of pitch thrown.
+        :param balls: (Optional) Current number of balls.
+        :param strikes: (Optional) Current number of strikes.
+        :return: The predicted pitch outcome.
+        """
+        if pitch_type and balls is not None and strikes is not None and (pitch_type in self.count_based_outcome_probs and (balls, strikes) in self.count_based_outcome_probs[pitch_type]):
+            outcome_probs = self.count_based_outcome_probs[pitch_type][(balls, strikes)]
+        elif pitch_type and pitch_type in self.outcome_probs:
+            outcome_probs = self.outcome_probs[pitch_type]
+        else:
+            outcome_probs = self.global_outcome_probs  # Fallback to global probabilities
+
+        if not outcome_probs:
+            return "Unknown Outcome"  # Fallback if data is missing
+        
+        outcomes, probabilities = zip(*outcome_probs.items())
+        outcome_index = np.random.multinomial(1, probabilities).argmax()
+        return outcomes[outcome_index]
 
 
 
@@ -163,7 +200,8 @@ class Pitcher:
         
         self.stats = statcast.loc[statcast.pitcher == id]
         self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(self.stats.copy())
-        self.pitch_probs, self.pitch_types, self.pitch_rates = self.__init_pitch_stats(self.stats.copy())
+        self.__init_pitch_stats_basic(self.stats)
+        self.__init_pitch_probs_count_based(self.stats)
 
     def init_in_play_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
@@ -185,24 +223,37 @@ class Pitcher:
     def get_in_play_probs(self):
         return self.in_play_probs, self.ip_outcomes
 
-    def __init_pitch_stats(self, probs):
-        ps = {}
-        pitches = []
-        count = []
+    def __init_pitch_stats_basic(self, pitcher_data: pd.DataFrame):
+        """
+        Computes overall pitch probabilities from the DataFrame.
+        """
+        pitch_counts = pitcher_data['pitch_type'].value_counts(normalize=True)
+        self.pitch_types = pitch_counts.index.tolist()  # List of pitch types
+        self.probabilities = pitch_counts.values
 
-        for pitch in probs.pitch_type.unique():
-            pitches.append(pitch)
-            p = probs.loc[probs.pitch_type == pitch]
-            count.append(len(p))
-            p = pd.crosstab(p.pitch_type, p.description)
-            p = p.div(p.sum(axis=1), axis=0)
-
-            outcomes = p.columns.to_list()
-            p = p.values.flatten().tolist()
-            ps[pitch] = p, outcomes
+    def __init_pitch_probs_count_based(self, pitcher_data: pd.DataFrame):
+        """
+        Computes pitch probabilities based on count (balls-strikes).
+        """
+        self.count_based_probs = {}
         
-        count = [c/sum(count) for c in count]
-        return ps, pitches, count
+        grouped = pitcher_data.groupby(['balls', 'strikes'])['pitch_type'].value_counts(normalize=True)
+        
+        for (balls, strikes), pitch_probs in grouped.groupby(level=[0, 1]):
+            self.count_based_probs[(balls, strikes)] = pitch_probs.droplevel([0, 1]).to_dict()
 
-    def simulate_pitch_basic(self): 
-        return self.pitch_types[random.multinomial(1, self.pitch_rates).tolist().index(1)]
+    def simulate_pitch(self, balls: int = None, strikes: int = None): 
+        """
+        Predicts the next pitch. If count is provided, uses count-based probabilities.
+        :param balls: (Optional) Current number of balls.
+        :param strikes: (Optional) Current number of strikes.
+        :return: The predicted pitch type.
+        """
+        if balls is not None and strikes is not None and (balls, strikes) in self.count_based_probs:
+            count_probs = self.count_based_probs[(balls, strikes)]
+            pitch_types, probabilities = zip(*count_probs.items())
+        else:
+            pitch_types, probabilities = self.pitch_types, self.probabilities
+
+        pitch_index = np.random.multinomial(1, probabilities).argmax()
+        return pitch_types[pitch_index]

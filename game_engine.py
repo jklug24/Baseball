@@ -130,30 +130,30 @@ class AtBatSimulator:
 
     def run(self):
         batter = self.simulationInfo.offense().batter()
-        strikes = 0
-        balls = 0
+        count = self.simulationInfo.count
+        count.reset()
         pitch_num = 1
         self.simulationInfo.log('{} up to bat.\n'.format(batter.name), logLevel=3)
 
-        while strikes < 3 and balls < 4:
+        while count.strikes < 3 and count.balls < 4:
             pitch, result = PitchSimulator.init(self.simulationInfo).run()
 
             if result == 'ball':
-                balls += 1
+                count.ball()
             elif result == 'called_strike' or result == 'swinging_strike':
-                strikes += 1
-            elif result == 'foul' and strikes < 2:
-                strikes += 1
+                count.strike()
+            elif result == 'foul' and count.strikes < 2:
+                count.strike()
             elif result == 'hit_into_play':
                 self.simulationInfo.log("{}. {}, {}".format(pitch_num, pitch, result), logLevel=3)
                 return batter.simulate_hit()
             
-            self.simulationInfo.log("{}. {}, {}\t{} - {}".format(pitch_num, pitch, result, balls, strikes), logLevel=3)
+            self.simulationInfo.log("{}. {}, {}\t{} - {}".format(pitch_num, pitch, result, count.balls, count.strikes), logLevel=3)
             pitch_num += 1
     
-        if strikes == 3:
+        if count.strikes == 3:
             return 'strikeout'
-        elif balls == 4:
+        elif count.balls == 4:
             return 'walk'
 
 
