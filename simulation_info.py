@@ -29,23 +29,52 @@ class SimulationInfo:
         away_team, 
         date, 
         home_roster=None, 
-        away_roster=None, 
+        away_roster=None,
+        home_pitcher_id=None,
+        away_pitcher_id=None,
+        stats = None, 
         backtest=False, 
         granularity: Granularity = Granularity.PITCH,
         pitchSimulator: str = 'basic',
         logLevel: int = 0
     ):
-        self.date = date
-        self.statcast = statcast(start_dt="2024-03-29", end_dt=date)
-        self.away_team = Team(away_team, date, away_roster, self.statcast, backtest=backtest)
-        self.home_team = Team(home_team, date, home_roster, self.statcast, backtest=backtest)
+        if stats is None:
+            self.statcast = statcast(start_dt="2024-03-29", end_dt=date)
+        else: 
+            self.statcast = stats
+
+        try:
+            self.away_team = Team(
+                name=away_team,
+                date=date,
+                roster=away_roster,
+                pitcher_id=away_pitcher_id,
+                statcast=self.statcast,
+                backtest=backtest
+            )
+        except ValueError as e:
+            raise ValueError(f"Failed to initialize away team: {str(e)}")
+
+        try:
+            self.home_team = Team(
+                name=home_team,
+                date=date,
+                roster=home_roster,
+                pitcher_id=home_pitcher_id,
+                statcast=self.statcast,
+                backtest=backtest
+            )
+        except ValueError as e:
+            raise ValueError(f"Failed to initialize home team: {str(e)}")
+        
+        self.granularity = granularity
+        self.pitchSimulator = pitchSimulator
+        self.logLevel = logLevel
+        self._log = ''
+
+        self.count = Count()
         self.inning = 1
         self.top = True
-        self.granularity = granularity
-        self.logLevel = logLevel
-        self.pitchSimulator = pitchSimulator
-        self.count = Count()
-        self._log = ''
 
     def is_home(self, team: Team):
         return team.name == self.home_team.name

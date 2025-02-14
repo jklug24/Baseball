@@ -5,20 +5,86 @@ import numpy as np
 from pybaseball import *
 
 
+# League average probabilities (nerfed) for basic outcomes - define at module level
+LEAGUE_AVG_PROBS = {
+    'ball': 0.35,           # ~35% balls
+    'called_strike': 0.17,  # ~17% called strikes
+    'swinging_strike': 0.10,# ~10% swinging strikes
+    'foul': 0.13,          # ~13% fouls
+    'hit_into_play': 0.25   # ~25% balls in play
+}
+
+# League average hit constants
+LEAGUE_AVG_OUTCOMES = ['field_out', 'single', 'double', 'triple', 'home_run']
+LEAGUE_AVG_HIT_PROBS = [0.69, 0.15, 0.09, 0.02, 0.05]
+
+# League average pitch type distribution
+LEAGUE_AVG_PITCH_TYPES = ['FF', 'SL', 'CH', 'CU', 'SI', 'FC']
+LEAGUE_AVG_PITCH_PROBS = [0.35, 0.20, 0.15, 0.15, 0.10, 0.05]  # Matches order of types above
+
+
 class Team:
-    def __init__(self, name, date, roster, statcast, backtest):
+    def __init__(self, name, date, roster=None, statcast=None, backtest=False, pitcher_id=None):
+        """Initialize a team with its roster and statistics.
+        
+        Args:
+            name: Team name
+            date: Game date
+            roster: List of player IDs for the team's roster. If None, will be predicted or fetched.
+            statcast: Statcast data for player statistics
+            backtest: Whether this is a backtest simulation
+            pitcher_id: ID of the starting pitcher. If None, will be predicted or fetched.
+            
+        Raises:
+            ValueError: If required data is missing or invalid
+        """
+        if not name:
+            raise ValueError("Team name is required")
+        if not date:
+            raise ValueError("Date is required")
+        if statcast is None:
+            raise ValueError("Statcast data is required")
+
         self.name = name
         self.date = date
+        self._pitcher_id = pitcher_id  # Store the provided pitcher_id
 
-        if (roster is None):
+        # Get roster and pitcher if not provided
+        if roster is None:
             if backtest:
-                roster, pitcher_id = self.get_roster(statcast)
-                statcast = statcast.loc[statcast.game_date != self.date]
+                try:
+                    roster, fetched_pitcher_id = Team.get_roster(statcast, name, date)
+                    statcast = statcast.loc[statcast.game_date != self.date]
+                    # Only use fetched pitcher if none was provided
+                    if self._pitcher_id is None:
+                        self._pitcher_id = fetched_pitcher_id
+                except Exception as e:
+                    raise ValueError(f"Failed to get historical roster for {name} on {date}: {str(e)}")
             else:
-                roster = self.predict_roster(statcast)
+                try:
+                    roster = self.predict_roster(statcast)
+                    if self._pitcher_id is None:
+                        raise ValueError(f"pitcher_id is required when not in backtest mode")
+                except Exception as e:
+                    raise ValueError(f"Failed to predict roster for {name}: {str(e)}")
 
-        self.roster = [Batter(id, statcast) for id in roster]
-        self._pitcher = Pitcher(pitcher_id, statcast)
+        # Validate roster
+        if not roster:
+            raise ValueError(f"No roster available for {name}")
+
+        # Initialize players
+        try:
+            self.roster = [Batter(id, statcast) for id in roster]
+        except Exception as e:
+            raise ValueError(f"Failed to initialize batters for {name}: {str(e)}")
+
+        # Initialize pitcher
+        if not self._pitcher_id:
+            raise ValueError(f"No pitcher ID available for {name}")
+        try:
+            self._pitcher = Pitcher(self._pitcher_id, statcast)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize pitcher {self._pitcher_id} for {name}: {str(e)}")
 
         self.idx = 0
         self.score = 0
@@ -53,9 +119,10 @@ class Team:
 
         return [i[0] for i in np.array(dfs)[np.array([i == max(equal) for i in equal])][-1]]
 
-    def get_roster(self, statcast):
-        pitchers = statcast.loc[(((statcast.home_team == self.name) & (statcast.inning_topbot == 'Top')) | ((statcast.away_team == self.name) & (statcast.inning_topbot == 'Bot'))) & (statcast.game_date == self.date)].iloc[0].pitcher
-        stats = statcast.loc[(((statcast.home_team == self.name) & (statcast.inning_topbot == 'Bot')) | ((statcast.away_team == self.name) & (statcast.inning_topbot == 'Top'))) & (statcast.game_date == self.date)]
+    @staticmethod
+    def get_roster(statcast, name, date):
+        pitchers = statcast.loc[(((statcast.home_team == name) & (statcast.inning_topbot == 'Top')) | ((statcast.away_team == name) & (statcast.inning_topbot == 'Bot'))) & (statcast.game_date == date)].iloc[0].pitcher
+        stats = statcast.loc[(((statcast.home_team == name) & (statcast.inning_topbot == 'Bot')) | ((statcast.away_team == name) & (statcast.inning_topbot == 'Top'))) & (statcast.game_date == date)]
         return [x for x in stats.groupby(['game_date', 'batter'])['at_bat_number'].min().to_frame().reset_index().sort_values('at_bat_number', ignore_index = True)['batter']], pitchers
 
     def get_lineup(self):
@@ -83,6 +150,7 @@ class Team:
 
 class Batter:
     def __init__(self, id, statcast):
+        """Initialize a batter with their statistics."""
         self.id = id
         name = playerid_reverse_lookup([id])
         if len(name):
@@ -95,7 +163,7 @@ class Batter:
         self.__init_batter_outcome_probs_global(stats)
         self.__init_batter_outcome_probs_basic(stats)
         self.__init_batter_outcome_probs_count_based(stats)
-    
+
     def init_in_play_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
         probs = pd.crosstab(probs.batter, probs.events)
@@ -121,18 +189,18 @@ class Batter:
         Computes overall probabilities for all outcomes, regardless of pitch type or count.
         """
         self.global_outcome_probs = batter_data['description'].value_counts(normalize=True).to_dict()
-
+            
 
     def __init_batter_outcome_probs_basic(self, batter_data: pd.DataFrame):
         """
         Computes overall outcome probabilities for each pitch type.
         """
-        self.outcome_probs = {}
+        self.basic_outcome_probs = {}
         
         grouped = batter_data.groupby('pitch_type')['description'].value_counts(normalize=True)
         
         for pitch_type, outcome_probs in grouped.groupby(level=0):
-            self.outcome_probs[pitch_type] = outcome_probs.droplevel(0).to_dict()
+            self.basic_outcome_probs[pitch_type] = outcome_probs.droplevel(0).to_dict()
 
     def __init_batter_outcome_probs_count_based(self, batter_data: pd.DataFrame):
         """
@@ -147,19 +215,14 @@ class Batter:
                 self.count_based_outcome_probs[pitch_type] = {}
             self.count_based_outcome_probs[pitch_type][(balls, strikes)] = outcome_probs.droplevel([0, 1, 2]).to_dict()
 
-    def get_pitch_probs(self, pitch):
-        return self.pitch_probs.get(pitch, ([
-            .1, .1, .1, .1, .1, .1
-        ],[
-            'ball',
-            'called_strike',
-            'foul',
-            'foul_tip',
-            'hit_into_play',
-            'swinging_strike']))
 
     def simulate_hit(self):
-        return self.ip_outcomes[random.multinomial(1, self.in_play_probs).tolist().index(1)]
+        try:
+            result = random.multinomial(1, self.in_play_probs).argmax()
+            return self.ip_outcomes[result]
+        except:
+            # Fallback if anything goes wrong
+            return LEAGUE_AVG_OUTCOMES[random.multinomial(1, LEAGUE_AVG_HIT_PROBS).argmax()]
 
 
     def get_pitch_result(self, pitch_type: str, balls: int = None, strikes: int = None) -> str:
@@ -172,18 +235,18 @@ class Batter:
         """
         if pitch_type and balls is not None and strikes is not None and (pitch_type in self.count_based_outcome_probs and (balls, strikes) in self.count_based_outcome_probs[pitch_type]):
             outcome_probs = self.count_based_outcome_probs[pitch_type][(balls, strikes)]
-        elif pitch_type and pitch_type in self.outcome_probs:
-            outcome_probs = self.outcome_probs[pitch_type]
+        elif pitch_type and pitch_type in self.basic_outcome_probs:
+            outcome_probs = self.basic_outcome_probs[pitch_type]
         else:
-            outcome_probs = self.global_outcome_probs  # Fallback to global probabilities
-
-        if not outcome_probs:
-            return "Unknown Outcome"  # Fallback if data is missing
+            outcome_probs = self.global_outcome_probs 
+        
+        # Ensure we have valid probabilities
+        if not outcome_probs or len(outcome_probs) == 0:
+            outcome_probs = LEAGUE_AVG_PROBS
         
         outcomes, probabilities = zip(*outcome_probs.items())
         outcome_index = np.random.multinomial(1, probabilities).argmax()
         return outcomes[outcome_index]
-
 
 
 
@@ -249,11 +312,15 @@ class Pitcher:
         :param strikes: (Optional) Current number of strikes.
         :return: The predicted pitch type.
         """
-        if balls is not None and strikes is not None and (balls, strikes) in self.count_based_probs:
-            count_probs = self.count_based_probs[(balls, strikes)]
-            pitch_types, probabilities = zip(*count_probs.items())
-        else:
-            pitch_types, probabilities = self.pitch_types, self.probabilities
+        try:
+            if balls is not None and strikes is not None and (balls, strikes) in self.count_based_probs:
+                count_probs = self.count_based_probs[(balls, strikes)]
+                pitch_types, probabilities = zip(*count_probs.items())
+            else:
+                pitch_types, probabilities = self.pitch_types, self.probabilities
 
-        pitch_index = np.random.multinomial(1, probabilities).argmax()
-        return pitch_types[pitch_index]
+            pitch_index = np.random.multinomial(1, probabilities).argmax()
+            return pitch_types[pitch_index]
+        except:
+            # Fallback to league average if anything goes wrong
+            return LEAGUE_AVG_PITCH_TYPES[np.random.multinomial(1, LEAGUE_AVG_PITCH_PROBS).argmax()]

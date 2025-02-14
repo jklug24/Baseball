@@ -28,7 +28,7 @@ class BasicPitchSimulator(PitchSimulator):
         batter = self.simulationInfo.offense().batter()
         pitcher = self.simulationInfo.defense().pitcher()
 
-        pitch = pitcher.simulate_pitch_basic()
+        pitch = pitcher.simulate_pitch()
         result = batter.get_pitch_result(pitch)
         return pitch, result
 
