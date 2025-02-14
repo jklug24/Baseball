@@ -22,7 +22,13 @@ class Pitcher:
         self.__init_pitch_probs_count_based(self.stats)
 
     def init_in_play_stats(self, probs):
+        """Initialize in-play statistics with proper normalization."""
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']
+        
+        if len(probs) == 0:
+            # Fallback to league average if no data
+            return [0.69, 0.15, 0.09, 0.02, 0.05], ['field_out', 'single', 'double', 'triple', 'home_run']
+            
         probs = pd.crosstab(probs.batter, probs.events)
 
         for outcome in outcome_list:
@@ -32,10 +38,13 @@ class Pitcher:
         probs['field_out'] = probs['field_out'] + probs['fielders_choice'] + probs['sac_fly']
         probs = probs[['field_out', 'single', 'double', 'triple', 'home_run']]
 
+        # Normalize to ensure probabilities sum to 1
         probs = probs.div(probs.sum(axis=1), axis=0)
-
+        
         outcomes = probs.columns.to_list()
-        probs = probs.values.flatten().tolist()
+        # Take mean across all batters and convert to list
+        probs = probs.mean().values.tolist()
+        
         return probs, outcomes
 
     def get_in_play_probs(self):
