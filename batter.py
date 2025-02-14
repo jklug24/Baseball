@@ -26,11 +26,14 @@ class Batter:
         else:
             self.name = "Unknown Player"
         
-        stats = statcast.loc[statcast.batter == id]
-        self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(stats.copy())
-        self.__init_batter_outcome_probs_global(stats)
-        self.__init_batter_outcome_probs_basic(stats)
-        self.__init_batter_outcome_probs_count_based(stats)
+        # Filter stats once
+        filtered_stats = statcast.loc[statcast.batter == id]
+        
+        # Initialize all probabilities and outcomes
+        self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(filtered_stats.copy())
+        self.__init_batter_outcome_probs_global(filtered_stats)
+        self.__init_batter_outcome_probs_basic(filtered_stats)
+        self.__init_batter_outcome_probs_count_based(filtered_stats)
 
     def init_in_play_stats(self, probs):
         outcome_list = ['field_out', 'fielders_choice', 'sac_fly', 'single', 'double', 'triple', 'home_run']

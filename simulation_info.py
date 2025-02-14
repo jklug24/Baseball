@@ -32,24 +32,40 @@ class SimulationInfo:
         away_roster=None,
         home_pitcher_id=None,
         away_pitcher_id=None,
-        stats = None, 
+        stats=None, 
         backtest=False, 
         granularity: Granularity = Granularity.PITCH,
         pitchSimulator: str = 'basic',
         logLevel: int = 0
     ):
+        """Initialize simulation info.
+        
+        Args:
+            home_team: Name of home team
+            away_team: Name of away team
+            date: Game date
+            home_roster: Optional roster for home team
+            away_roster: Optional roster for away team
+            home_pitcher_id: Optional starting pitcher ID for home team
+            away_pitcher_id: Optional starting pitcher ID for away team
+            stats: Optional Statcast data for both teams
+            backtest: Whether this is a backtest simulation
+            granularity: Simulation granularity level
+            pitchSimulator: Pitch simulator to use
+            logLevel: Log level
+        """
+        # Get statcast data if not provided
         if stats is None:
-            self.statcast = statcast(start_dt="2024-03-29", end_dt=date)
-        else: 
-            self.statcast = stats
+            stats = statcast(start_dt="2024-03-29", end_dt=date)
 
+        # Initialize teams (they will extract what they need from stats)
         try:
             self.away_team = Team(
                 name=away_team,
                 date=date,
                 roster=away_roster,
                 pitcher_id=away_pitcher_id,
-                statcast=self.statcast,
+                statcast=stats,
                 backtest=backtest
             )
         except ValueError as e:
@@ -61,17 +77,17 @@ class SimulationInfo:
                 date=date,
                 roster=home_roster,
                 pitcher_id=home_pitcher_id,
-                statcast=self.statcast,
+                statcast=stats,
                 backtest=backtest
             )
         except ValueError as e:
             raise ValueError(f"Failed to initialize home team: {str(e)}")
         
+        self.date = date
         self.granularity = granularity
         self.pitchSimulator = pitchSimulator
         self.logLevel = logLevel
         self._log = ''
-
         self.count = Count()
         self.inning = 1
         self.top = True
@@ -92,5 +108,5 @@ class SimulationInfo:
     def defense(self): return self.home_team if self.top else self.away_team
 
     def log(self, message: str, logLevel: int = 0):
-        if logLevel <= self.logLevel: 
+        if logLevel <= 0: 
             self._log += ('\t'*(logLevel-1)) + message + '\n'

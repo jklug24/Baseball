@@ -16,10 +16,13 @@ class Pitcher:
         else:
             self.name = "Unknown Player"
         
-        self.stats = statcast.loc[statcast.pitcher == id]
-        self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(self.stats.copy())
-        self.__init_pitch_stats_basic(self.stats)
-        self.__init_pitch_probs_count_based(self.stats)
+        # Filter stats once
+        filtered_stats = statcast.loc[statcast.pitcher == id]
+        
+        # Initialize all probabilities and outcomes
+        self.in_play_probs, self.ip_outcomes = self.init_in_play_stats(filtered_stats.copy())
+        self.__init_pitch_stats_basic(filtered_stats)
+        self.__init_pitch_probs_count_based(filtered_stats)
 
     def init_in_play_stats(self, probs):
         """Initialize in-play statistics with proper normalization."""
