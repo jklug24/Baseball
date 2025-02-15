@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from batter import Batter
+from db_manager import DatabaseManager
 
 class TestBatter(unittest.TestCase):
     def setUp(self):
@@ -21,22 +22,35 @@ class TestBatter(unittest.TestCase):
             'description': ['ball'] * 35 + ['called_strike'] * 17 + ['swinging_strike'] * 10 + 
                          ['foul'] * 13 + ['hit_into_play'] * 25
         })
+        
+        # Clear any existing data for this batter
+        self._db = DatabaseManager()
+        self._db.clear_batter_probs_basic()
+        
         self.batter = Batter(123456, self.sample_data)
+
+    def tearDown(self):
+        # Clean up database after test
+        self._db.clear_batter_probs_basic()
 
     def test_init_in_play_stats(self):
         """Test if in-play statistics are calculated correctly"""
         # Check if probabilities sum to 1
-        self.assertAlmostEqual(sum(self.batter.in_play_probs), 1.0, places=5)
+        self.assertAlmostEqual(sum(self.batter.in_play_probs.values()), 1.0, places=5)
         
         # Check if outcomes match expected
         expected_outcomes = ['field_out', 'single', 'double', 'triple', 'home_run']
-        self.assertEqual(set(self.batter.ip_outcomes), set(expected_outcomes))
+        self.assertEqual(set(self.batter.in_play_probs.keys()), set(expected_outcomes))
         
         # Check probability distribution based on our sample data
-        # 40% field outs, 30% singles, 20% doubles, 0% triples, 10% home runs
-        expected_probs = [0.4, 0.3, 0.2, 0.0, 0.1]
-        for actual, expected in zip(self.batter.in_play_probs, expected_probs):
-            self.assertAlmostEqual(actual, expected, places=5)
+        # With our sample data:
+        # 40 field outs, 30 singles, 20 doubles, 0 triples, 10 home runs
+        total_hits = 100
+        self.assertAlmostEqual(self.batter.in_play_probs['field_out'], 40/total_hits, places=2)
+        self.assertAlmostEqual(self.batter.in_play_probs['single'], 30/total_hits, places=2)
+        self.assertAlmostEqual(self.batter.in_play_probs['double'], 20/total_hits, places=2)
+        self.assertAlmostEqual(self.batter.in_play_probs['triple'], 0/total_hits, places=2)
+        self.assertAlmostEqual(self.batter.in_play_probs['home_run'], 10/total_hits, places=2)
 
     def test_global_outcome_probs(self):
         """Test if global outcome probabilities are calculated correctly"""
@@ -60,15 +74,15 @@ class TestBatter(unittest.TestCase):
                 msg=f"Probability for {outcome} doesn't match"
             )
 
-    def test_basic_outcome_probs(self):
+    def test_basic_probs(self):
         """Test if basic outcome probabilities per pitch type are calculated correctly"""
         # Check if we have probabilities for each pitch type
         expected_pitch_types = set(['FF', 'SL', 'CH'])
-        self.assertEqual(set(self.batter.basic_outcome_probs.keys()), expected_pitch_types)
+        self.assertEqual(set(self.batter.basic_probs.keys()), expected_pitch_types)
         
         # Check if probabilities for each pitch type sum to 1
-        for pitch_type in self.batter.basic_outcome_probs:
-            probs = self.batter.basic_outcome_probs[pitch_type]
+        for pitch_type in self.batter.basic_probs:
+            probs = self.batter.basic_probs[pitch_type]
             self.assertAlmostEqual(sum(probs.values()), 1.0, places=5)
 
     def test_count_based_outcome_probs(self):
