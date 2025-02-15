@@ -24,16 +24,20 @@ class TestPitcher(unittest.TestCase):
 
     def test_init_basic_stats(self):
         """Test if basic pitch probabilities are calculated correctly"""
-        # Check pitch types
-        expected_types = ['FF', 'SL', 'CH']
-        self.assertEqual(self.pitcher.pitch_types, expected_types)
+        # Check pitch types and probabilities
+        expected_probs = {
+            'FF': 0.5,
+            'SL': 0.3,
+            'CH': 0.2
+        }
         
-        # Check probabilities sum to 1
-        self.assertAlmostEqual(np.sum(self.pitcher.probabilities), 1.0)
+        # Check that all expected pitch types are present with correct probabilities
+        for pitch_type, prob in expected_probs.items():
+            self.assertIn(pitch_type, self.pitcher.basic_probs)
+            self.assertAlmostEqual(self.pitcher.basic_probs[pitch_type], prob, places=5)
         
-        # Check individual probabilities
-        expected_probs = np.array([0.5, 0.3, 0.2])  # 50%, 30%, 20%
-        np.testing.assert_array_almost_equal(self.pitcher.probabilities, expected_probs)
+        # Check total probability sums to 1
+        self.assertAlmostEqual(sum(self.pitcher.basic_probs.values()), 1.0, places=5)
 
     def test_count_based_probabilities(self):
         """Test if count-based probabilities are calculated correctly"""
@@ -83,17 +87,17 @@ class TestPitcher(unittest.TestCase):
         """Test handling of invalid count"""
         # Test with invalid count (4,3)
         pitch = self.pitcher.simulate_pitch(4, 3)
-        self.assertIn(pitch, self.pitcher.pitch_types)
+        self.assertIn(pitch, self.pitcher.basic_probs.keys())
 
     def test_in_play_stats(self):
         """Test calculation of in-play statistics"""
         # Check if probabilities sum to 1
-        self.assertAlmostEqual(sum(self.pitcher.in_play_probs), 1.0, places=5)
+        self.assertAlmostEqual(sum(self.pitcher.in_play_probs.values()), 1.0, places=5)
         
         # Check if all necessary outcomes are present
         expected_outcomes = ['field_out', 'single', 'double', 'home_run']
         for outcome in expected_outcomes:
-            self.assertIn(outcome, self.pitcher.ip_outcomes)
+            self.assertIn(outcome, self.pitcher.in_play_probs)
 
 if __name__ == '__main__':
     unittest.main()
